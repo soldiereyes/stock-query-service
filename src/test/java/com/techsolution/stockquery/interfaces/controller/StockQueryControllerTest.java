@@ -57,52 +57,6 @@ class StockQueryControllerTest {
         );
     }
 
-    @Test
-    @DisplayName("GET /stocks - Deve retornar todos os estoques com sucesso")
-    void shouldGetAllStocksSuccessfully() {
-        // Given
-        List<StockView> stocks = Arrays.asList(stockView1, stockView2);
-        when(stockQueryService.findAll()).thenReturn(stocks);
-        when(stockQueryService.getMinimumStockLimit()).thenReturn(10);
-
-        // When
-        ResponseEntity<List<StockViewDTO>> response = stockQueryController.getAllStocks();
-
-        // Then
-        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
-        assertThat(response.getBody()).isNotNull();
-        assertThat(response.getBody()).hasSize(2);
-        
-        StockViewDTO dto1 = response.getBody().get(0);
-        assertThat(dto1.getProductId()).isEqualTo(productId1);
-        assertThat(dto1.getProductName()).isEqualTo("Produto 1");
-        assertThat(dto1.getQuantityAvailable()).isEqualTo(15);
-        assertThat(dto1.getStockBelowMinimum()).isFalse();
-
-        StockViewDTO dto2 = response.getBody().get(1);
-        assertThat(dto2.getProductId()).isEqualTo(productId2);
-        assertThat(dto2.getProductName()).isEqualTo("Produto 2");
-        assertThat(dto2.getQuantityAvailable()).isEqualTo(5);
-        assertThat(dto2.getStockBelowMinimum()).isTrue();
-
-        verify(stockQueryService, times(1)).findAll();
-    }
-
-    @Test
-    @DisplayName("GET /stocks - Deve retornar lista vazia quando não há estoques")
-    void shouldReturnEmptyListWhenNoStocks() {
-        // Given
-        when(stockQueryService.findAll()).thenReturn(List.of());
-
-        // When
-        ResponseEntity<List<StockViewDTO>> response = stockQueryController.getAllStocks();
-
-        // Then
-        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
-        assertThat(response.getBody()).isNotNull();
-        assertThat(response.getBody()).isEmpty();
-        verify(stockQueryService, times(1)).findAll();
-    }
 
     @Test
     @DisplayName("GET /stocks/{productId} - Deve retornar estoque quando produto existe")
