@@ -1,0 +1,13 @@
+# Git
+.git
+.gitignore
+
+# IDEs
+.idea
+.vscode
+
+# Build output
+target
+
+# OS
+.DS_Store
