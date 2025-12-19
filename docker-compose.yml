@@ -1,6 +1,8 @@
 networks:
   microservices-network:
     driver: bridge
+  product-service_default:
+    external: true
 
 services:
   stock-query-service:
@@ -14,3 +16,4 @@ services:
     restart: unless-stopped
     networks:
       - microservices-network
+      - product-service_default
