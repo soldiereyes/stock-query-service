@@ -6,18 +6,19 @@ Microserviço responsável exclusivamente por consultas de estoque, seguindo os 
 
 Este serviço implementa uma arquitetura baseada em DDD com separação clara de responsabilidades:
 
-- **Domain**: Modelos e interfaces de repositório (sem dependências do Spring)
+- **Domain**: Modelos de domínio (sem dependências do Spring)
 - **Application**: Serviços de aplicação e DTOs
-- **Infrastructure**: Implementações de persistência (JPA) e configurações
+- **Infrastructure**: Cliente HTTP (Feign) e configurações
 - **Interfaces**: Controllers REST
+
+**Nota:** Este serviço não possui banco de dados próprio. Ele consulta o `product-service` em tempo real via HTTP para obter informações dos produtos.
 
 ## Tecnologias
 
 - Java 21
 - Spring Boot 4.0.1
-- PostgreSQL
+- Spring Cloud OpenFeign (comunicação HTTP entre serviços)
 - Docker & Docker Compose
-- JPA/Hibernate
 
 ## Estrutura do Projeto
 
@@ -30,52 +31,37 @@ stock-query-service
     │   └── service
     │       └── StockQueryService.java
     ├── domain
-    │   ├── model
-    │   │   └── StockView.java
-    │   └── repository
-    │       └── StockQueryRepository.java
+    │   └── model
+    │       └── StockView.java
     ├── infrastructure
-    │   ├── config
-    │   │   ├── GlobalExceptionHandler.java
-    │   │   └── JpaConfig.java
-    │   └── persistence
-    │       ├── JpaStockQueryRepository.java
-    │       └── StockViewEntity.java
+    │   ├── client
+    │   │   ├── ProductDTO.java
+    │   │   └── ProductServiceClient.java
+    │   └── config
+    │       └── GlobalExceptionHandler.java
     └── interfaces
         └── controller
             └── StockQueryController.java
 ```
 
-## Banco de Dados
+## Comunicação entre Serviços
 
-O serviço utiliza PostgreSQL. A tabela `stock_view` é criada automaticamente pelo Hibernate na inicialização da aplicação.
+Este serviço se comunica com o **product-service** para obter informações dos produtos:
 
-### Estrutura da Tabela
+1. Recebe requisições com o ID do produto
+2. Consulta o **product-service** via HTTP (Feign Client) para obter dados do produto
+3. Retorna os dados agregados de estoque e informa se está abaixo do limite mínimo (< 10 unidades)
 
-- `product_id` (UUID, PK)
-- `product_name` (VARCHAR)
-- `quantity_available` (INTEGER)
-- `last_updated` (TIMESTAMP)
+### Arquitetura de Comunicação
+
+```
+Cliente → stock-query-service (8082) → product-service (8081)
+         GET /stocks/{productId}      GET /products/{productId}
+```
 
 ## API REST
 
 ### Endpoints
-
-#### GET /stocks
-Retorna todos os estoques disponíveis.
-
-**Resposta:**
-```json
-[
-  {
-    "productId": "uuid",
-    "productName": "Nome do Produto",
-    "quantityAvailable": 15,
-    "lastUpdated": "2024-01-01T10:00:00",
-    "stockBelowMinimum": false
-  }
-]
-```
 
 #### GET /stocks/{productId}
 Retorna o estoque de um produto específico.
@@ -105,12 +91,11 @@ docker compose up --build
 
 O serviço estará disponível em `http://localhost:8082`
 
-**Nota:** A tabela `stock_view` será criada automaticamente pelo Hibernate na primeira inicialização.
+**Importante:** Certifique-se de que o `product-service` está rodando e acessível na URL configurada (padrão: `http://localhost:8081`).
 
 ### Localmente
 
-1. Certifique-se de ter PostgreSQL rodando na porta 5433 (ou ajuste as configurações)
-2. Execute:
+Execute:
 ```bash
 ./mvnw spring-boot:run
 ```
@@ -120,8 +105,8 @@ O serviço estará disponível em `http://localhost:8082`
 As configurações principais estão em `application.properties`:
 
 - Porta: 8082
-- Banco de dados: `stock_db`
-- Hibernate: `ddl-auto=update` (cria/atualiza tabelas automaticamente)
+- Product Service URL: `product.service.url` (padrão: `http://localhost:8081`)
+- Configurável via variável de ambiente: `PRODUCT_SERVICE_URL`
 
 ## Características
 
@@ -131,7 +116,9 @@ As configurações principais estão em `application.properties`:
 - ✅ Exception Handling: Tratamento global de erros
 - ✅ Logging: Logs estruturados
 - ✅ Docker: Containerização completa
-- ✅ Hibernate: Criação automática de tabelas
+- ✅ Feign Client: Comunicação HTTP com product-service
+- ✅ Integração: Consulta product-service em tempo real para obter dados de produtos
+- ✅ Sem Banco de Dados: Não requer banco próprio, consulta product-service diretamente
 
 ## Limite Mínimo de Estoque
 
