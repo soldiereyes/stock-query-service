@@ -1,8 +1,10 @@
 package com.techsolution.stockquery.interfaces.controller;
 
+import com.techsolution.stockquery.application.dto.PageResponseDTO;
 import com.techsolution.stockquery.application.dto.StockViewDTO;
 import com.techsolution.stockquery.application.service.StockQueryService;
 import com.techsolution.stockquery.domain.model.StockView;
+import com.techsolution.stockquery.infrastructure.client.PageResponse;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -14,6 +16,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -110,6 +113,143 @@ class StockQueryControllerTest {
         assertThat(response.getBody()).isNotNull();
         assertThat(response.getBody().getStockBelowMinimum()).isTrue();
         assertThat(response.getBody().getQuantityAvailable()).isEqualTo(5);
+    }
+
+    @Test
+    @DisplayName("GET /stocks - Deve retornar estoques paginados")
+    void shouldGetAllStocksPaginated() {
+        // Given
+        PageResponse<StockView> pageResponse = new PageResponse<>(
+                List.of(stockView1, stockView2), 0, 20, 2L, 1, true, true
+        );
+        when(stockQueryService.findStocksPaginated(0, 20)).thenReturn(pageResponse);
+        when(stockQueryService.getMinimumStockLimit()).thenReturn(10);
+
+        // When
+        ResponseEntity<PageResponseDTO<StockViewDTO>> response = 
+                stockQueryController.getAllStocksPaginated(0, 20);
+
+        // Then
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(response.getBody()).isNotNull();
+        assertThat(response.getBody().getContent()).hasSize(2);
+        assertThat(response.getBody().getPage()).isEqualTo(0);
+        assertThat(response.getBody().getSize()).isEqualTo(20);
+        assertThat(response.getBody().getTotalElements()).isEqualTo(2L);
+        assertThat(response.getBody().getTotalPages()).isEqualTo(1);
+        assertThat(response.getBody().getFirst()).isTrue();
+        assertThat(response.getBody().getLast()).isTrue();
+        
+        verify(stockQueryService, times(1)).findStocksPaginated(0, 20);
+    }
+
+    @Test
+    @DisplayName("GET /stocks - Deve usar valores padrão quando parâmetros não são fornecidos")
+    void shouldUseDefaultValuesWhenParametersNotProvided() {
+        // Given
+        PageResponse<StockView> pageResponse = new PageResponse<>(
+                List.of(stockView1), 0, 20, 1L, 1, true, true
+        );
+        when(stockQueryService.findStocksPaginated(0, 20)).thenReturn(pageResponse);
+        when(stockQueryService.getMinimumStockLimit()).thenReturn(10);
+
+        // When
+        ResponseEntity<PageResponseDTO<StockViewDTO>> response = 
+                stockQueryController.getAllStocksPaginated(null, null);
+
+        // Then
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        verify(stockQueryService, times(1)).findStocksPaginated(0, 20);
+    }
+
+    @Test
+    @DisplayName("GET /stocks - Deve validar e corrigir parâmetros inválidos")
+    void shouldValidateAndCorrectInvalidParameters() {
+        // Given
+        PageResponse<StockView> pageResponse = new PageResponse<>(
+                List.of(stockView1), 0, 20, 1L, 1, true, true
+        );
+        when(stockQueryService.findStocksPaginated(0, 20)).thenReturn(pageResponse);
+        when(stockQueryService.getMinimumStockLimit()).thenReturn(10);
+
+        // When - page negativo e size maior que 100
+        ResponseEntity<PageResponseDTO<StockViewDTO>> response = 
+                stockQueryController.getAllStocksPaginated(-1, 150);
+
+        // Then - deve corrigir para valores válidos
+        verify(stockQueryService, times(1)).findStocksPaginated(0, 20);
+    }
+
+    @Test
+    @DisplayName("GET /stock - Deve retornar todos os estoques (carregamento completo)")
+    void shouldGetAllStocksComplete() {
+        // Given
+        List<StockView> allStocks = List.of(stockView1, stockView2);
+        when(stockQueryService.findAllStocks(0, 20)).thenReturn(allStocks);
+        when(stockQueryService.getMinimumStockLimit()).thenReturn(10);
+
+        // When
+        ResponseEntity<?> response = stockQueryController.getAllStocks(null, null);
+
+        // Then
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(response.getBody()).isNotNull();
+        assertThat(response.getBody()).isInstanceOf(List.class);
+        
+        @SuppressWarnings("unchecked")
+        List<StockViewDTO> body = (List<StockViewDTO>) response.getBody();
+        assertThat(body).hasSize(2);
+        
+        verify(stockQueryService, times(1)).findAllStocks(0, 20);
+    }
+
+    @Test
+    @DisplayName("GET /stock - Deve usar size fornecido para iteração")
+    void shouldUseProvidedSizeForIteration() {
+        // Given
+        List<StockView> allStocks = List.of(stockView1, stockView2);
+        when(stockQueryService.findAllStocks(0, 50)).thenReturn(allStocks);
+        when(stockQueryService.getMinimumStockLimit()).thenReturn(10);
+
+        // When
+        ResponseEntity<?> response = stockQueryController.getAllStocks(null, 50);
+
+        // Then
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        verify(stockQueryService, times(1)).findAllStocks(0, 50);
+    }
+
+    @Test
+    @DisplayName("GET /stock - Deve limitar size ao máximo de 100")
+    void shouldLimitSizeToMax100() {
+        // Given
+        List<StockView> allStocks = List.of(stockView1);
+        when(stockQueryService.findAllStocks(0, 100)).thenReturn(allStocks);
+        when(stockQueryService.getMinimumStockLimit()).thenReturn(10);
+
+        // When - tenta usar size maior que 100
+        ResponseEntity<?> response = stockQueryController.getAllStocks(null, 150);
+
+        // Then - deve usar 100 como máximo
+        verify(stockQueryService, times(1)).findAllStocks(0, 100);
+        verify(stockQueryService, never()).findAllStocks(0, 150);
+    }
+
+    @Test
+    @DisplayName("GET /stock/{productId} - Endpoint de compatibilidade deve redirecionar para endpoint principal")
+    void shouldRedirectCompatibilityEndpoint() {
+        // Given
+        when(stockQueryService.findByProductId(productId1)).thenReturn(Optional.of(stockView1));
+        when(stockQueryService.getMinimumStockLimit()).thenReturn(10);
+
+        // When
+        ResponseEntity<StockViewDTO> response = 
+                stockQueryController.getStockByProductIdCompat(productId1);
+
+        // Then
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(response.getBody()).isNotNull();
+        verify(stockQueryService, times(1)).findByProductId(productId1);
     }
 }
 

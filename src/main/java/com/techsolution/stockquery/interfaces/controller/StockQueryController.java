@@ -11,7 +11,6 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
-import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -89,20 +88,26 @@ public class StockQueryController {
         logger.info("GET /stocks - Buscando estoques paginados - page: {}, size: {}", page, size);
         
         try {
-            // Validar parâmetros
-            if (page != null && page < 0) {
+            if (page == null) {
+                page = 0;
+            }
+            if (size == null) {
+                size = 20;
+            }
+            
+
+            if (page < 0) {
                 logger.warn("Parâmetro 'page' inválido: {}. Usando 0.", page);
                 page = 0;
             }
             
-            if (size != null && (size < 1 || size > 100)) {
+            if (size < 1 || size > 100) {
                 logger.warn("Parâmetro 'size' inválido: {}. Deve estar entre 1 e 100. Usando 20.", size);
                 size = 20;
             }
             
             PageResponse<StockView> stockPageResponse = stockQueryService.findStocksPaginated(page, size);
             
-            // Converter StockView para StockViewDTO
             List<StockViewDTO> stockDTOs = stockPageResponse.getContent().stream()
                     .map(this::toDTO)
                     .collect(Collectors.toList());
@@ -159,10 +164,8 @@ public class StockQueryController {
                 pageSize = 100;
             }
             
-            // Buscar todos os estoques (itera sobre todas as páginas)
             List<StockView> allStocks = stockQueryService.findAllStocks(0, pageSize);
             
-            // Converter StockView para StockViewDTO
             List<StockViewDTO> stockDTOs = allStocks.stream()
                     .map(this::toDTO)
                     .collect(Collectors.toList());

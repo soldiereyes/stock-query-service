@@ -1,6 +1,7 @@
 package com.techsolution.stockquery.application.service;
 
 import com.techsolution.stockquery.domain.model.StockView;
+import com.techsolution.stockquery.infrastructure.client.PageResponse;
 import com.techsolution.stockquery.infrastructure.client.ProductDTO;
 import com.techsolution.stockquery.infrastructure.client.ProductServiceClient;
 import org.junit.jupiter.api.BeforeEach;
@@ -14,6 +15,8 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 
 import java.math.BigDecimal;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -148,6 +151,139 @@ class StockQueryServiceTest {
         assertThat(stockView.getProductName()).isEqualTo("Produto 2");
         assertThat(stockView.getQuantityAvailable()).isEqualTo(5);
         assertThat(stockView.getLastUpdated()).isNotNull();
+    }
+
+    @Test
+    @DisplayName("Deve buscar estoques paginados do product-service")
+    void shouldFindStocksPaginated() {
+        // Given
+        List<ProductDTO> products = List.of(productDTO1, productDTO2);
+        PageResponse<ProductDTO> pageResponse = new PageResponse<>(
+                products, 0, 20, 2L, 1, true, true
+        );
+        ResponseEntity<PageResponse<ProductDTO>> response = ResponseEntity.ok(pageResponse);
+        when(productServiceClient.getProducts(0, 20)).thenReturn(response);
+
+        // When
+        PageResponse<StockView> result = stockQueryService.findStocksPaginated(0, 20);
+
+        // Then
+        assertThat(result).isNotNull();
+        assertThat(result.getContent()).hasSize(2);
+        assertThat(result.getPage()).isEqualTo(0);
+        assertThat(result.getSize()).isEqualTo(20);
+        assertThat(result.getTotalElements()).isEqualTo(2L);
+        assertThat(result.getTotalPages()).isEqualTo(1);
+        assertThat(result.getFirst()).isTrue();
+        assertThat(result.getLast()).isTrue();
+        
+        verify(productServiceClient, times(1)).getProducts(0, 20);
+    }
+
+    @Test
+    @DisplayName("Deve buscar todos os estoques iterando sobre todas as páginas")
+    void shouldFindAllStocksIteratingAllPages() {
+        // Given - Primeira página
+        List<ProductDTO> page1Products = List.of(productDTO1);
+        PageResponse<ProductDTO> page1Response = new PageResponse<>(
+                page1Products, 0, 20, 2L, 2, true, false
+        );
+        ResponseEntity<PageResponse<ProductDTO>> page1 = ResponseEntity.ok(page1Response);
+        
+        // Segunda página
+        List<ProductDTO> page2Products = List.of(productDTO2);
+        PageResponse<ProductDTO> page2Response = new PageResponse<>(
+                page2Products, 1, 20, 2L, 2, false, true
+        );
+        ResponseEntity<PageResponse<ProductDTO>> page2 = ResponseEntity.ok(page2Response);
+        
+        when(productServiceClient.getProducts(0, 20)).thenReturn(page1);
+        when(productServiceClient.getProducts(1, 20)).thenReturn(page2);
+
+        // When
+        List<StockView> result = stockQueryService.findAllStocks(0, 20);
+
+        // Then
+        assertThat(result).isNotNull();
+        assertThat(result).hasSize(2);
+        assertThat(result.get(0).getProductId()).isEqualTo(productId1);
+        assertThat(result.get(1).getProductId()).isEqualTo(productId2);
+        
+        verify(productServiceClient, times(1)).getProducts(0, 20);
+        verify(productServiceClient, times(1)).getProducts(1, 20);
+    }
+
+    @Test
+    @DisplayName("Deve buscar todos os estoques quando há apenas uma página")
+    void shouldFindAllStocksWithSinglePage() {
+        // Given
+        List<ProductDTO> products = List.of(productDTO1, productDTO2);
+        PageResponse<ProductDTO> pageResponse = new PageResponse<>(
+                products, 0, 20, 2L, 1, true, true
+        );
+        ResponseEntity<PageResponse<ProductDTO>> response = ResponseEntity.ok(pageResponse);
+        when(productServiceClient.getProducts(0, 20)).thenReturn(response);
+
+        // When
+        List<StockView> result = stockQueryService.findAllStocks(0, 20);
+
+        // Then
+        assertThat(result).isNotNull();
+        assertThat(result).hasSize(2);
+        verify(productServiceClient, times(1)).getProducts(0, 20);
+        verify(productServiceClient, never()).getProducts(1, 20);
+    }
+
+    @Test
+    @DisplayName("Deve limitar size ao máximo de 100 ao buscar estoques paginados")
+    void shouldLimitSizeToMax100WhenFindingStocksPaginated() {
+        // Given
+        List<ProductDTO> products = new ArrayList<>();
+        PageResponse<ProductDTO> pageResponse = new PageResponse<>(
+                products, 0, 100, 0L, 1, true, true
+        );
+        ResponseEntity<PageResponse<ProductDTO>> response = ResponseEntity.ok(pageResponse);
+        when(productServiceClient.getProducts(0, 100)).thenReturn(response);
+
+        // When - tenta usar size maior que 100
+        stockQueryService.findStocksPaginated(0, 150);
+
+        // Then - deve usar 100 como máximo
+        verify(productServiceClient, times(1)).getProducts(0, 100);
+        verify(productServiceClient, never()).getProducts(0, 150);
+    }
+
+    @Test
+    @DisplayName("Deve lançar exceção quando product-service falha ao buscar produtos paginados")
+    void shouldThrowExceptionWhenProductServiceFailsOnPaginatedRequest() {
+        // Given
+        when(productServiceClient.getProducts(0, 20))
+                .thenThrow(new RuntimeException("Erro de conexão"));
+
+        // When/Then
+        assertThatThrownBy(() -> stockQueryService.findStocksPaginated(0, 20))
+                .isInstanceOf(RuntimeException.class)
+                .hasMessageContaining("Erro ao buscar produtos paginados");
+        verify(productServiceClient, times(1)).getProducts(0, 20);
+    }
+
+    @Test
+    @DisplayName("Deve retornar lista vazia quando product-service retorna página sem conteúdo")
+    void shouldReturnEmptyListWhenProductServiceReturnsEmptyPage() {
+        // Given
+        PageResponse<ProductDTO> emptyPageResponse = new PageResponse<>(
+                new ArrayList<>(), 0, 20, 0L, 1, true, true
+        );
+        ResponseEntity<PageResponse<ProductDTO>> response = ResponseEntity.ok(emptyPageResponse);
+        when(productServiceClient.getProducts(0, 20)).thenReturn(response);
+
+        // When
+        List<StockView> result = stockQueryService.findAllStocks(0, 20);
+
+        // Then
+        assertThat(result).isNotNull();
+        assertThat(result).isEmpty();
+        verify(productServiceClient, times(1)).getProducts(0, 20);
     }
 }
 
