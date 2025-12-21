@@ -57,7 +57,13 @@ Este serviço se comunica com o **product-service** para obter informações dos
 ```
 Cliente → stock-query-service (8082) → product-service (8081)
          GET /stocks/{productId}      GET /products/{productId}
+         GET /stocks?page=0&size=20   GET /products?page=0&size=20
+         GET /stock                   GET /products (itera todas as páginas)
 ```
+
+**Nota:** O `product-service` agora retorna respostas paginadas. O `stock-query-service` suporta:
+- **Paginação simples**: `/stocks?page=0&size=20` - retorna uma página específica
+- **Carregamento completo**: `/stock` - itera sobre todas as páginas automaticamente
 
 ## API REST
 
@@ -80,6 +86,80 @@ Retorna o estoque de um produto específico.
 **Status Codes:**
 - `200 OK`: Produto encontrado
 - `404 Not Found`: Produto não encontrado
+
+#### GET /stocks
+Lista estoques com suporte a paginação.
+
+**Parâmetros de Query:**
+- `page` (opcional): Número da página (começa em 0, padrão: 0)
+- `size` (opcional): Tamanho da página (padrão: 20, máximo: 100)
+
+**Exemplo de Requisição:**
+```
+GET /stocks?page=0&size=20
+```
+
+**Resposta:**
+```json
+{
+  "content": [
+    {
+      "productId": "uuid",
+      "productName": "Nome do Produto",
+      "quantityAvailable": 5,
+      "lastUpdated": "2024-01-01T10:00:00",
+      "stockBelowMinimum": true
+    }
+  ],
+  "page": 0,
+  "size": 20,
+  "totalElements": 150,
+  "totalPages": 8,
+  "first": true,
+  "last": false
+}
+```
+
+**Status Codes:**
+- `200 OK`: Lista de estoques retornada com sucesso
+
+#### GET /stock
+Lista **todos** os estoques (carrega todas as páginas automaticamente).
+
+**Parâmetros de Query:**
+- `page` (opcional): Ignorado - carrega todas as páginas
+- `size` (opcional): Tamanho usado durante iteração (padrão: 20, máximo: 100)
+
+**Exemplo de Requisição:**
+```
+GET /stock
+GET /stock?size=50
+```
+
+**Resposta:**
+```json
+[
+  {
+    "productId": "uuid",
+    "productName": "Nome do Produto",
+    "quantityAvailable": 5,
+    "lastUpdated": "2024-01-01T10:00:00",
+    "stockBelowMinimum": true
+  },
+  {
+    "productId": "uuid2",
+    "productName": "Outro Produto",
+    "quantityAvailable": 15,
+    "lastUpdated": "2024-01-01T10:00:00",
+    "stockBelowMinimum": false
+  }
+]
+```
+
+**Status Codes:**
+- `200 OK`: Lista completa de estoques retornada
+
+**Nota:** Este endpoint itera sobre todas as páginas do `product-service` para retornar todos os produtos. Use `/stocks` com paginação para melhor performance quando houver muitos produtos.
 
 ## Executando o Serviço
 
