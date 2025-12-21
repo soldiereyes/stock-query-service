@@ -8,10 +8,11 @@ import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.Map;
 import java.util.UUID;
 
 @RestController
-@RequestMapping("/stocks")
+@CrossOrigin(origins = "*", maxAge = 3600)
 public class StockQueryController {
 
     private static final Logger logger = LoggerFactory.getLogger(StockQueryController.class);
@@ -22,7 +23,7 @@ public class StockQueryController {
         this.stockQueryService = stockQueryService;
     }
 
-    @GetMapping("/{productId}")
+    @GetMapping("/stocks/{productId}")
     public ResponseEntity<StockViewDTO> getStockByProductId(@PathVariable UUID productId) {
         long startTime = System.currentTimeMillis();
         logger.info("=== INÍCIO REQUEST ===");
@@ -55,6 +56,31 @@ public class StockQueryController {
                     productId, duration, e);
             throw e;
         }
+    }
+
+    /**
+     * Endpoint de compatibilidade: /stock/{productId} (sem 's') para suportar frontend que usa este path
+     */
+    @GetMapping("/stock/{productId}")
+    public ResponseEntity<StockViewDTO> getStockByProductIdCompat(@PathVariable UUID productId) {
+        logger.info("GET /stock/{} - Endpoint de compatibilidade (redirecionando para /stocks/{})", productId, productId);
+        // Reutiliza a mesma lógica do endpoint principal
+        return getStockByProductId(productId);
+    }
+
+    /**
+     * Endpoint de compatibilidade: /stock sem parâmetros (retorna erro informativo)
+     */
+    @GetMapping("/stock")
+    public ResponseEntity<?> getAllStocks() {
+        logger.info("GET /stock - Endpoint de compatibilidade chamado sem productId");
+        logger.warn("Endpoint /stock requer productId. Use /stock/{productId} ou /stocks/{productId}");
+        
+        return ResponseEntity.badRequest().body(Map.of(
+            "error", "Bad Request",
+            "message", "Endpoint /stock requer productId. Use /stock/{productId} ou /stocks/{productId} para consultar estoque de um produto específico.",
+            "example", "/stocks/{productId}"
+        ));
     }
 
     private StockViewDTO toDTO(StockView stock) {
